@@ -1,0 +1,3 @@
+,Model,Parameters,Mean CV R2 Score,Test R2 Score
+0,XGBRegressor,"{'n_estimators': 126, 'learning_rate': 0.24996683589662105, 'max_depth': 2, 'max_leaves': 18}",0.38524757119791575,0.745163175969451
+1,CatBoostRegressor,"{'iterations': 304, 'learning_rate': 0.24820155588247286, 'depth': 10, 'l2_leaf_reg': 14.819258037482335}",0.4432190285242211,0.5350709322270555
