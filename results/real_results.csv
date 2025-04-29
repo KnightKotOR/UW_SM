@@ -1,8 +1,8 @@
 ,Model,Parameters,Mean CV Score,Test R2 Score
-0,NWScikit,"{'batch_size': 58, 'epoch_n': 342, 'n_neurons': 166, 'n_layers': 2, 'lr': 0.00023474382172578395}",-2.1712409318983554,0.37347973944603097
-1,HistGradientBoostingRegressor,"{'learning_rate': 0.021582642874623477, 'max_iter': 218, 'max_leaf_nodes': 19, 'max_depth': 3, 'min_samples_leaf': 13}",-1.7779723146166937,-0.30868465600420003
-2,XGBRegressor,"{'n_estimators': 11, 'learning_rate': 0.12812160647288215, 'max_depth': 22, 'max_leaves': 10, 'reg_alpha': 0.5677003278199915}",-2.092981594204903,-0.017813554536872944
-3,GradientBoostingRegressor,"{'n_estimators': 58, 'learning_rate': 0.11834753329181472, 'max_depth': 11, 'min_samples_split': 18, 'min_samples_leaf': 13}",-1.8092769785883964,-0.3789266610796216
-4,ExtraTreesRegressor,"{'n_estimators': 220, 'max_depth': 15, 'min_samples_split': 18, 'min_samples_leaf': 6}",-2.1317117897661175,0.026244330358741186
-5,RandomForestRegressor,"{'n_estimators': 114, 'max_depth': 23, 'min_samples_split': 4, 'min_samples_leaf': 4}",-2.128523953278292,-0.0032799181551503853
-6,CatBoostRegressor,"{'iterations': 395, 'learning_rate': 0.03832491306185132, 'depth': 4, 'l2_leaf_reg': 7.98973851475434}",-2.0556907479322932,0.1507082453587535
+0,NWScikit,"{'batch_size': 61, 'epoch_n': 322, 'n_neurons': 54, 'n_layers': 2, 'lr': 9.861581829391646e-05}",-2.098486400643984,0.24700164683180703
+1,HistGradientBoostingRegressor,"{'learning_rate': 0.021582642874623477, 'max_iter': 218, 'max_leaf_nodes': 19, 'max_depth': 3, 'min_samples_leaf': 13}",-2.0189128291693716,0.5290042603712793
+2,XGBRegressor,"{'n_estimators': 11, 'learning_rate': 0.12812160647288215, 'max_depth': 22, 'max_leaves': 10, 'reg_alpha': 0.5677003278199915}",-2.2750708966785007,0.3390661709531029
+3,GradientBoostingRegressor,"{'n_estimators': 22, 'learning_rate': 0.16831424252378568, 'max_depth': 10, 'min_samples_split': 18, 'min_samples_leaf': 13}",-2.008835945468324,0.572790895564072
+4,ExtraTreesRegressor,"{'n_estimators': 92, 'max_depth': 3, 'min_samples_split': 16, 'min_samples_leaf': 8}",-2.107600183585928,0.30049082184077613
+5,RandomForestRegressor,"{'n_estimators': 11, 'max_depth': 13, 'min_samples_split': 8, 'min_samples_leaf': 5}",-2.170746465867899,0.3794238994765138
+6,CatBoostRegressor,"{'iterations': 179, 'learning_rate': 0.1983139930443267, 'depth': 10, 'l2_leaf_reg': 1.4944145299136486}",-2.0657075020118225,0.3571859158067172
