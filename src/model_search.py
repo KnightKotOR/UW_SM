@@ -1,7 +1,8 @@
+from inspect import signature
 import numpy as np
 import pandas as pd
 from sklearn.metrics import r2_score
-from sklearn.model_selection import cross_validate
+from sklearn.model_selection import cross_validate, LeaveOneOut
 from bayes_opt import BayesianOptimization
 
 
@@ -17,6 +18,7 @@ class BayesianSearchCV:
         :param random_state: Случайное состояние для воспроизводимости результатов
         """
         self.best_model = None
+
         self.y = None
         self.X = None
         self.model_class = model_class
@@ -34,13 +36,18 @@ class BayesianSearchCV:
         :param params: Параметры модели
         :return: Среднее значение метрики на кросс-валидации
         """
-        # Устанавливаем параметры модели
-        if 'loss_function' in dir(self.model_class):
-            model = self.model_class(**params, verbose=0, loss_function='RMSE')
-        else:
-            model = self.model_class(**params, verbose=0)
+        # Получение списка параметров модели
+        p = list(signature(self.model_class).parameters.keys())
 
-        cv_results = cross_validate(model, self.X, self.y, cv=self.cv, scoring=['r2', 'neg_mean_squared_error'])
+        # При наличии параметра verbose, он указывается с 0
+        if 'verbose' in p:
+            model = self.model_class(**params, verbose=0)
+        else:
+            model = self.model_class(**params)
+
+        cv_results = cross_validate(model, self.X, self.y, cv=self.cv, scoring=['r2', 'neg_mean_squared_error'],
+                                    return_estimator=True)
+
         r2, nmse = cv_results['test_r2'], cv_results['test_neg_mean_squared_error']
         mean_cv_score = np.mean(r2)
 
@@ -50,7 +57,7 @@ class BayesianSearchCV:
         """
         Обучение модели с использованием байесовской оптимизации
 
-        :param X: Матрица признаков
+        :param X: Признаки
         :param y: Вектор целевых значений
         """
         self.X = X
@@ -65,7 +72,7 @@ class BayesianSearchCV:
         )
 
         # Запускаем оптимизацию
-        self.optimizer.maximize(init_points=10, n_iter=self.n_iter)
+        self.optimizer.maximize(init_points=15, n_iter=self.n_iter)
 
         # Устанавливаем лучшие найденные параметры
         best_params = {key: int(value) if value.is_integer() else value for key, value in
@@ -95,19 +102,22 @@ class BayesianSearchCV:
         return self.results_df
 
     def save_model(self, score):
+        """
+        Сохранение лучшей модели
+        """
         name = type(self.best_model).__name__
         self.best_model.save_model(name)
 
 
 class MultiModelBayesianSearchCV:
-    def __init__(self, model_classes, cv=4, n_iter=20, random_state=None):
+    def __init__(self, model_classes, cv=4, n_iter=10, random_state=None):
         """
-        Инициализация класса для оптимизации нескольких моделей.
+        Инициализация класса для оптимизации нескольких моделей
 
-        :param model_classes: Список классов моделей для оптимизации.
-        :param cv: Количество фолдов для кросс-валидации.
-        :param n_iter: Количество итераций для байесовской оптимизации.
-        :param random_state: Случайное состояние для воспроизводимости.
+        :param model_classes: Список классов моделей для оптимизации
+        :param cv: Количество фолдов для кросс-валидации
+        :param n_iter: Количество итераций для байесовской оптимизации
+        :param random_state: Случайное состояние для воспроизводимости
         """
         self.model_classes = model_classes
         self.best_models = []
@@ -125,7 +135,7 @@ class MultiModelBayesianSearchCV:
                 'min_samples_leaf': (1, 20, int)
             },
             'CatBoostRegressor': {
-                'iterations': (50, 500, int),
+                'iterations': (50, 300, int),
                 'learning_rate': (0.01, 0.3),
                 'depth': (1, 10, int),
                 'l2_leaf_reg': (1, 20),
@@ -150,19 +160,35 @@ class MultiModelBayesianSearchCV:
                 'min_samples_leaf': (1, 20, int)
             },
             'NWScikit': {
-                'batch_size': (10, 100, int),
-                'epoch_n': (10, 500, int),
-                'n_neurons': (8, 256, int),
-                'n_layers': (1, 4, int)
+                'batch_size': (40, 80, int),
+                'epoch_n': (100, 500, int),
+                'n_neurons': (50, 256, int),
+                'n_layers': (1, 2, int),
+                'lr': (1e-5,5e-4)
+            },
+            'Ridge': {
+                'alpha': (0.8, 1.2)
+            },
+            'ElasticNet': {
+                'alpha': (0.1, 1.2),
+                'l1_ratio': (0, 1),
+                'max_iter': (100, 1000, int)
+            },
+            'HistGradientBoostingRegressor': {
+                'learning_rate': (0.01, 0.2),
+                'max_iter': (10, 500, int),
+                'max_leaf_nodes': (15, 50, int),
+                'max_depth': (1, 30, int),
+                'min_samples_leaf': (1, 20, int)
             }
         }
 
     def _get_param_bounds(self, model_class):
         """
-        Получение границ параметров для заданного класса модели.
+        Получение границ параметров для заданного класса модели
 
-        :param model_class: Класс модели.
-        :return: Словарь с границами параметров.
+        :param model_class: Класс модели
+        :return: Словарь с границами параметров
         """
         model_name = model_class.__name__
         if model_name in self.param_bounds_templates:
@@ -172,10 +198,10 @@ class MultiModelBayesianSearchCV:
 
     def fit(self, X, y):
         """
-        Проведение байесовской оптимизации для всех моделей.
+        Проведение байесовской оптимизации для всех моделей
 
-        :param X: Признаки для обучения.
-        :param y: Целевые значения.
+        :param X: Признаки для обучения
+        :param y: Целевые значения
         """
         for model_class in self.model_classes:
             param_bounds = self._get_param_bounds(model_class)
@@ -199,9 +225,9 @@ class MultiModelBayesianSearchCV:
 
     def get_results(self):
         """
-        Получение результатов оптимизации.
+        Получение результатов оптимизации
 
-        :return: Датафрейм с результатами.
+        :return: Датафрейм с результатами
         """
         return self.results_df
 
@@ -210,7 +236,7 @@ class MultiModelBayesianSearchCV:
         Получение R2 Score для всех моделей
         :param X: Параметры
         :param y: Точное значение
-        :return:
+        :return: R2 Score
         """
         if len(self.best_models) == 0:
             raise ValueError(f"Нет обученных моделей для оценки")
@@ -223,9 +249,13 @@ class MultiModelBayesianSearchCV:
 
         self.results_df['Test R2 Score'] = model_scores
 
-    def find_max(self, scaler, init_points=20, n_iter=100):
+    def find_max(self, scaler, real_ds=False, init_points=20, n_iter=80):
         """
-        Поиск максимума
+        Поиск максимума.
+        :param scaler: scaler, использовавшийся для нормализации обучающей и тестовой выборок
+        :param real_ds: Флаг для выбора границ оптимизации реального датасета
+        :param init_points: Количество начальных точек байесовской оптимизации
+        :param n_iter: Количество итераций для байесовской оптимизации
 
         :return:
         """
@@ -233,13 +263,23 @@ class MultiModelBayesianSearchCV:
         def func(**params):
             x = np.array(list(params.values())).reshape(1, -1)
             x_normalized = scaler.transform(x)
-            return _model.predict(x_normalized)[0]
+            y_pred = _model.predict(x_normalized).flatten()[0]
+            return y_pred
 
-        opt_bounds = {
-            'x1': (0, 100),
-            'x2': (0, 100),
-            'x3': (0, 100),
-        }
+        if real_ds:
+            opt_bounds = {
+                'Pc': (2, 4, int),
+                'U': (50, 100),
+                't': (2, 5, int),
+                'Sc': (120, 400),
+                'Pp': (1, 3.5)
+            }
+        else:
+            opt_bounds = {
+                'x1': (0, 120),
+                'x2': (0, 120),
+                'x3': (0, 120),
+            }
 
         for _model in self.best_models:
             optimizer = BayesianOptimization(
@@ -252,7 +292,7 @@ class MultiModelBayesianSearchCV:
             optimal_x = optimizer.max['params']
             max_y = optimizer.max['target']
 
-            print(f"Model {type(_model).__name__} has found maximum {max_y} with parameters {optimal_x}")
+            print(f"Model {type(_model).__name__} found maximum {max_y} with parameters {optimal_x}")
 
     def save_models(self):
         """

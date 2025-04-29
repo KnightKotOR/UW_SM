@@ -164,12 +164,12 @@ class NWScikit(BaseEstimator, RegressorMixin):
     pred_batch_size: int = 16
     lr: float = 1e-3
     weight_decay: float = 0
-    background_lr: float = 1e-3
+    background_lr: float = 1e-4
     background_weight_decay: float = 0
     dist_mode: str = 'mlp'
     kernel_fit_background: bool = True
     problem_mode: str = 'reg'
-    optimizer: str = 'Adam'
+    optimizer: str = 'SGD'
     n_layers: Optional[int] = None
     n_neurons: Optional[int] = None
     batch_norm: Optional[bool] = False
@@ -245,15 +245,17 @@ class NWScikit(BaseEstimator, RegressorMixin):
 
         optimizer = opt_claz(
             [
-                dict(params=model.dist_model.parameters(), lr=self.lr, weight_decay=self.weight_decay),
+                dict(params=model.dist_model.parameters(), lr=self.lr, weight_decay=self.weight_decay, momentum=0.95),
                 dict(params=model.y_background, lr=self.background_lr, weight_decay=self.background_weight_decay),
             ]
         )
 
         it = tqdm(range(self.epoch_n)) if self.verbose_tqdm else range(self.epoch_n)
 
+        best_loss = None
+        best_state = None
+
         for epoch_i in it:
-            model.train()
             for x_batch, y_batch in dataloader:
                 optimizer.zero_grad()
                 y_pred = model(x_batch)
@@ -263,19 +265,38 @@ class NWScikit(BaseEstimator, RegressorMixin):
 
             self._model = model
 
+        #model.load_state_dict(best_state)
+
         self._model = model
         self._fit_history = pd.DataFrame(history)
 
+    # def predict(self, X: Union[pd.DataFrame, np.ndarray, torch.Tensor]) -> np.ndarray:
+    #     assert self._model is not None, 'Calling predict(..) before fit(..)'
+    #     X = self._torch_cast(X)
+    #     predloader = DataLoader(
+    #         dataset=TensorDataset(X),
+    #         batch_size=self.pred_batch_size,
+    #         shuffle=False
+    #     )
+    #     return np.vstack([self._model(x_batch).detach().cpu().numpy() for (x_batch,) in predloader])
+
     def predict(self, X: Union[pd.DataFrame, np.ndarray, torch.Tensor]) -> np.ndarray:
         assert self._model is not None, 'Calling predict(..) before fit(..)'
-        self._model.eval()
         X = self._torch_cast(X)
         predloader = DataLoader(
             dataset=TensorDataset(X),
             batch_size=self.pred_batch_size,
             shuffle=False
         )
-        return np.vstack([self._model(x_batch).detach().cpu().numpy() for (x_batch,) in predloader])
+
+        preds: List[np.ndarray] = []
+        with torch.no_grad():
+            for (x_batch,) in predloader:
+                x_batch = x_batch
+                output = self._model(x_batch)
+                preds.append(output.detach().cpu().numpy())
+
+        return np.vstack(preds)
 
     def find_min(self, X: Union[pd.DataFrame, np.ndarray, torch.Tensor]) -> np.ndarray:
         self._model.eval()
