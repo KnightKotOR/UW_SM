@@ -1,13 +1,13 @@
 from inspect import signature
 import numpy as np
 import pandas as pd
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_absolute_percentage_error
 from sklearn.model_selection import cross_validate, LeaveOneOut
 from bayes_opt import BayesianOptimization
 
 
 class BayesianSearchCV:
-    def __init__(self, model_class, param_bounds, cv=4, n_iter=20, random_state=None):
+    def __init__(self, model_class, param_bounds, cv=LeaveOneOut(), n_iter=20, random_state=None):
         """
         Инициализация класса BayesianOptimizationWrapper
 
@@ -27,7 +27,7 @@ class BayesianSearchCV:
         self.n_iter = n_iter
         self.random_state = random_state
         self.optimizer = None
-        self.results_df = pd.DataFrame(columns=['Model', 'Parameters', 'Mean CV R2 Score'])
+        self.results_df = pd.DataFrame(columns=['Model', 'Parameters', 'Mean CV Score'])
 
     def _objective_function(self, **params):
         """
@@ -45,11 +45,15 @@ class BayesianSearchCV:
         else:
             model = self.model_class(**params)
 
-        cv_results = cross_validate(model, self.X, self.y, cv=self.cv, scoring=['r2', 'neg_mean_squared_error'],
-                                    return_estimator=True)
+        cv_results = cross_validate(model, self.X, self.y, cv=self.cv,
+                                    scoring=['neg_mean_squared_error', 'neg_mean_absolute_percentage_error', 'neg_mean_squared_log_error', 'neg_median_absolute_error'],
+                                    return_estimator=True, n_jobs=-1)
 
-        r2, nmse = cv_results['test_r2'], cv_results['test_neg_mean_squared_error']
-        mean_cv_score = np.mean(r2)
+        nmse, mape, nmsle, nmedae = cv_results['test_neg_mean_squared_error'], cv_results[
+            'test_neg_mean_absolute_percentage_error'], cv_results[
+            'test_neg_mean_squared_log_error'], cv_results[
+            'test_neg_median_absolute_error']
+        mean_cv_score = np.mean(nmedae)
 
         return mean_cv_score
 
@@ -72,7 +76,7 @@ class BayesianSearchCV:
         )
 
         # Запускаем оптимизацию
-        self.optimizer.maximize(init_points=15, n_iter=self.n_iter)
+        self.optimizer.maximize(init_points=20, n_iter=self.n_iter)
 
         # Устанавливаем лучшие найденные параметры
         best_params = {key: int(value) if value.is_integer() else value for key, value in
@@ -85,7 +89,7 @@ class BayesianSearchCV:
         self.results_df = pd.concat([self.results_df, pd.DataFrame({
             'Model': type(self.best_model).__name__,
             'Parameters': [best_params],
-            'Mean CV R2 Score': self.optimizer.max['target']
+            'Mean CV Score': self.optimizer.max['target']
         })], ignore_index=True)
 
     def predict(self, X):
@@ -110,7 +114,7 @@ class BayesianSearchCV:
 
 
 class MultiModelBayesianSearchCV:
-    def __init__(self, model_classes, cv=4, n_iter=10, random_state=None):
+    def __init__(self, model_classes, cv=LeaveOneOut(), n_iter=10, random_state=None):
         """
         Инициализация класса для оптимизации нескольких моделей
 
@@ -124,7 +128,7 @@ class MultiModelBayesianSearchCV:
         self.cv = cv
         self.n_iter = n_iter
         self.random_state = random_state
-        self.results_df = pd.DataFrame(columns=['Model', 'Parameters', 'Mean CV R2 Score'])
+        self.results_df = pd.DataFrame(columns=['Model', 'Parameters', 'Mean CV Score'])
 
         # Предопределённые границы параметров для различных классов моделей
         self.param_bounds_templates = {
@@ -135,7 +139,7 @@ class MultiModelBayesianSearchCV:
                 'min_samples_leaf': (1, 20, int)
             },
             'CatBoostRegressor': {
-                'iterations': (50, 300, int),
+                'iterations': (50, 400, int),
                 'learning_rate': (0.01, 0.3),
                 'depth': (1, 10, int),
                 'l2_leaf_reg': (1, 30),
@@ -151,7 +155,8 @@ class MultiModelBayesianSearchCV:
                 'n_estimators': (10, 300, int),
                 'learning_rate': (0.001, 0.3),
                 'max_depth': (1, 30, int),
-                'max_leaves': (1, 30, int)
+                'max_leaves': (1, 30, int),
+                'reg_alpha':(0, 1)
             },
             'ExtraTreesRegressor': {
                 'n_estimators': (10, 300, int),
@@ -164,7 +169,7 @@ class MultiModelBayesianSearchCV:
                 'epoch_n': (100, 500, int),
                 'n_neurons': (50, 256, int),
                 'n_layers': (1, 2, int),
-                'lr': (1e-5,5e-4)
+                'lr': (1e-5, 5e-4)
             },
             'Ridge': {
                 'alpha': (0.8, 1.2)
@@ -276,9 +281,9 @@ class MultiModelBayesianSearchCV:
             }
         else:
             opt_bounds = {
-                'x1': (0, 120),
-                'x2': (0, 120),
-                'x3': (0, 120),
+                'x1': (0, 140),
+                'x2': (0, 140),
+                'x3': (0, 140),
             }
 
         for _model in self.best_models:
