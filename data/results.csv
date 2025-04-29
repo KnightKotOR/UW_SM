@@ -1,8 +1,0 @@
-,Model,Parameters,Mean CV R2 Score,Test R2 Score
-0,NWScikit,"{'batch_size': 68, 'epoch_n': 392, 'n_neurons': 182, 'n_layers': 2, 'lr': 0.00034513123733011247}",0.44688906038754234,-0.155124107553815
-1,HistGradientBoostingRegressor,"{'learning_rate': 0.07254631798974534, 'max_iter': 82, 'max_leaf_nodes': 46, 'max_depth': 6, 'min_samples_leaf': 3}",0.6600624005743067,0.5842072669447875
-2,XGBRegressor,"{'n_estimators': 52, 'learning_rate': 0.07522399935498351, 'max_depth': 25, 'max_leaves': 11}",0.5902394123418786,0.42141139077137735
-3,GradientBoostingRegressor,"{'n_estimators': 108, 'learning_rate': 0.13964692174185955, 'max_depth': 28, 'min_samples_split': 19, 'min_samples_leaf': 1}",0.6787182123438311,0.729749705749368
-4,ExtraTreesRegressor,"{'n_estimators': 246, 'max_depth': 30, 'min_samples_split': 2, 'min_samples_leaf': 1}",0.5452294213407147,0.5619577929179492
-5,RandomForestRegressor,"{'n_estimators': 122, 'max_depth': 21, 'min_samples_split': 2, 'min_samples_leaf': 1}",0.5536879272794962,0.6351836037915484
-6,CatBoostRegressor,"{'iterations': 252, 'learning_rate': 0.21868729328105171, 'depth': 2, 'l2_leaf_reg': 11.117576843702011}",0.6166721254935716,0.7070559735919608

@@ -14,12 +14,13 @@ from nw_kernel import NWScikit
 warnings.filterwarnings(action="ignore")
 
 # Загрузка данных
-df = pd.read_csv('data/synth_ds_0.csv')
-# df = pd.read_csv('data/real_ds_0.csv')
+#df = pd.read_csv('data/synth_ds_0.csv')
+df = pd.read_csv('data/real_ds_0.csv')
 columns = [*df]
 
 # Преобразование в массивы
-x_data = np.array(df[columns[:-1]].values.tolist())
+#x_data = np.array(df[columns[:-1]].values.tolist())
+x_data = np.array(df[columns[:-3]].values.tolist())
 y_data = np.array(df[columns[-1]].values.tolist()).reshape([-1, 1])
 
 # Разделение на обучающую и тестовую выборки
@@ -37,14 +38,15 @@ if __name__ == "__main__":
                      RandomForestRegressor, CatBoostRegressor]
 
     # Гиперпараметрический поиск и оценка моделей
-    BO = model_search.MultiModelBayesianSearchCV(model_classes, cv=8, n_iter=45, random_state=42)
+    BO = model_search.MultiModelBayesianSearchCV(model_classes, cv=8, n_iter=35, random_state=42)
     BO.fit(x_train, y_train)
     BO.score(x_test, y_test)
     results = BO.get_results()
-    results.to_csv('data/results.csv')
-    print(results.to_string())
+    #results.to_csv('results/results.csv')
+    results.to_csv('results/real_results.csv')
+    print(results.to_string(), '\n')
 
     # Оптимизация над аппроксимируемой функцией
-    BO.find_max(scaler)
+    BO.find_max(scaler, True)
 
     # BO.save_models()

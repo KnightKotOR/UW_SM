@@ -138,7 +138,7 @@ class MultiModelBayesianSearchCV:
                 'iterations': (50, 300, int),
                 'learning_rate': (0.01, 0.3),
                 'depth': (1, 10, int),
-                'l2_leaf_reg': (1, 20),
+                'l2_leaf_reg': (1, 30),
             },
             'GradientBoostingRegressor': {
                 'n_estimators': (10, 300, int),
@@ -271,8 +271,8 @@ class MultiModelBayesianSearchCV:
                 'Pc': (2, 4, int),
                 'U': (50, 100),
                 't': (2, 5, int),
-                'Sc': (120, 400),
-                'Pp': (1, 3.5)
+                'L': (8, 22),
+                'B': (8, 22)
             }
         else:
             opt_bounds = {
