@@ -19,9 +19,8 @@ from sklearn.svm import SVR
 from xgboost import XGBRegressor
 from nw_kernel import NWScikit
 
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.model_selection import LeaveOneOut, cross_val_predict, StratifiedKFold
-from scipy.optimize import fmin
 from plotly.io import show
 
 warnings.filterwarnings('ignore')
@@ -195,6 +194,7 @@ class Objective(object):
         # Кросс-валидация
         y_pred = cross_val_predict(regressor_obj, self.X, self.y, cv=self.cv, verbose=0, n_jobs=-1)
         r2_val = r2_score(self.y, y_pred)
+        #mse = mean_squared_error(self.y, y_pred)
 
         regressor_obj.fit(self.X, self.y)
         y_test_pred = regressor_obj.predict(self.X_test)
@@ -256,7 +256,7 @@ class OptunaSearchCV:
                 self.results_df = pd.concat([self.results_df, objective.get_results()], ignore_index=True)
 
     def optimize(self, model_list, scaler, direction='maximize', problem='real', plot=False, continue_study=False,
-                 n_trials=100, n_startup_trials=50, verbose=False):
+                 n_trials=100, n_startup_trials=20, verbose=False):
         y, x = None, None
 
         def objective(trial):
@@ -267,6 +267,16 @@ class OptunaSearchCV:
                 L = trial.suggest_float('L', 8, 22)
                 B = trial.suggest_float('B', 12, 18.5)
                 params = [Pp, U, t, L, B]
+            elif problem == 'cement':
+                Cem = trial.suggest_float('Cem', 100.0, 540.0, log=True)
+                Slag = trial.suggest_float('Slag', 0.0, 360.0)
+                Ash = trial.suggest_float('Ash', 0.0, 200)
+                W = trial.suggest_float('W', 121.8, 247.0)
+                S = trial.suggest_float('S', 0, 32.2)
+                CF = trial.suggest_float('CF', 801.0, 1145.0)
+                AF = trial.suggest_int('AF', 594.0, 992.6)
+                A = trial.suggest_float('A', 1, 365)
+                params = [Cem, Slag, Ash, W, S, CF, AF, A]
             else:
                 x1 = trial.suggest_float('x1', 0, 100)
                 x2 = trial.suggest_float('x2', 0, 100)
@@ -278,17 +288,13 @@ class OptunaSearchCV:
 
         for i, _model in enumerate(model_list):
             def func(params):
-                """
-                Аппроксимирующая функция суррогатной модели
-                :param params: вектор x
-                :return: результат прогнозирования суррогатной модели
-                """
                 x = np.array(params).reshape(1, -1)
                 x_normalized = scaler.transform(x)
                 y_pred = _model.predict(x_normalized).flatten()[0]
                 return y_pred
 
             sampler = optuna.samplers.TPESampler(multivariate=True, n_startup_trials=n_startup_trials, constant_liar=True)
+            #sampler = optuna.samplers.BruteForceSampler(multivariate=True, n_startup_trials=n_startup_trials)
             #sampler = optuna.samplers.GPSampler(n_startup_trials=n_startup_trials)
             #sampler = optuna.samplers.CmaEsSampler(n_startup_trials=n_startup_trials)
             study_name = f"optimize_study_{type(_model).__name__}"
@@ -319,14 +325,14 @@ class OptunaSearchCV:
 
         return y, x
 
-    def simulate_experiment(self, initial_func, surrogate_model, scaler, x_train, y_train, x_min, y_min, tol=0.1,
+    def simulate_experiment(self, initial_func, surrogate_model, scaler, x_train, y_train, x_min, y_min, tol=0.3,
                             max_iter=50, n_trials=50, n_startup_trials=50, direction='minimize'):
         """
         Моделирование итеративной оптимизации физического эксперимента с использованием суррогатной модели
         """
-        # _surrogate_model = deepcopy(surrogate_model)
         _scaler = deepcopy(scaler)
         _x_train_scaled = deepcopy(x_train)
+        _surrogate_model = deepcopy(surrogate_model)
 
         continue_study = False
         accuracy_history = []
@@ -338,7 +344,6 @@ class OptunaSearchCV:
         remaining_iter = max_iter
 
         while dx >= tol and remaining_iter > 0:
-            _surrogate_model = deepcopy(surrogate_model)
             _surrogate_model.fit(_x_train_scaled, y_train)
 
             y_pred, x_params = self.optimize([_surrogate_model], _scaler, direction=direction, problem='synth',
@@ -361,8 +366,6 @@ class OptunaSearchCV:
 
             accuracy_history.append(dy)
             min_history.append(dy_min)
-
-            # _surrogate_model.fit(x_train, y_train)
 
             continue_study = True
             remaining_iter -= 1
