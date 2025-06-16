@@ -5,10 +5,9 @@ from typing import List, Iterator, Optional, Union
 import numpy as np
 import pandas as pd
 import torch
-from sklearn.metrics import mean_squared_error
 from sklearn.base import BaseEstimator, RegressorMixin
 from torch import Tensor
-from torch.nn import Parameter
+from torch.nn import Parameter, ModuleList, Linear
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm import tqdm
 
@@ -93,6 +92,96 @@ class NAMDistModel(DistModel):
         res = [self.nams[dim](X[:, [dim]]) for dim in range(X.shape[-1])]
         return torch.stack(res, dim=1).swapaxes(1, 2)
 
+class GAMDistModel(DistModel):
+    """Generalized Additive Model implementation of :class:`DistModel`.
+
+    Each feature is represented by its own smooth univariate function that is
+    approximated with a set of fixed RBF‑spline basis functions.  The sum of
+    these feature‑specific functions yields the *b*‑vector used by the
+    surrounding :class:`NwKernelModel`.
+
+    Parameters
+    ----------
+    in_size : int
+        Number of input features.
+    n_splines : int, default=10
+        Number of spline/RBF basis functions per feature.
+    gamma : float, default=10.0
+        Spread parameter of the RBF kernels.
+    min_vals, max_vals : Optional[torch.Tensor]
+        Per‑feature tensors (shape = ``(in_size,)``) holding the minimum and
+        maximum values used to normalise inputs to the ``[0,1]`` interval
+        before evaluating the basis functions.  If ``None``, defaults to
+        0‑1 scaling (i.e. assumes inputs are pre‑scaled).
+    """
+
+    def __init__(
+        self,
+        in_size: int,
+        n_splines: int = 10,
+        gamma: float = 10.0,
+        min_vals: Optional[torch.Tensor] = None,
+        max_vals: Optional[torch.Tensor] = None,
+    ):
+        super().__init__()
+        self.in_size = in_size
+        self.n_splines = n_splines
+        self.gamma = gamma
+
+        # One independent linear head per feature (additive assumption).
+        self.linears = ModuleList(
+            [Linear(n_splines, 1, bias=False) for _ in range(in_size)]
+        )
+
+        # Fixed, equally‑spaced knots in [0,1] (shared across the batch).
+        knots_1d = torch.linspace(0.0, 1.0, n_splines)
+        # Shape: (in_size, n_splines) to allow feature‑wise lookup.
+        self.register_buffer("knots", knots_1d.repeat(in_size, 1))
+
+        # Feature‑wise scaling buffers (these are not trainable).
+        if min_vals is None:
+            min_vals = torch.zeros(in_size)
+        if max_vals is None:
+            max_vals = torch.ones(in_size)
+        self.register_buffer("min_vals", min_vals)
+        self.register_buffer("max_vals", max_vals)
+
+    # ---------------------------------------------------------------------
+    # DistModel API
+    # ---------------------------------------------------------------------
+
+    def parameters(self, **kwargs) -> Iterator[Tensor]:
+        return (p for linear in self.linears for p in linear.parameters())
+
+    def _rbf(self, x: Tensor, centers: Tensor) -> Tensor:
+        """Compute the Gaussian RBF design matrix for a single feature.
+        Parameters
+        ----------
+        x : Tensor, shape = ``(batch,1)``
+        centers : Tensor, shape = ``(1,n_splines)``
+        """
+        return torch.exp(-self.gamma * (x - centers) ** 2)
+
+    def get_b_vectors(self, X: Tensor) -> Tensor:
+        # Normalise inputs to [0,1] for the fixed knot positions.
+        X_norm = (X - self.min_vals) / (self.max_vals - self.min_vals + 1e-8)
+
+        batch_coeffs = []
+        for j in range(self.in_size):
+            # Slice j‑th feature column and expand: (batch,1).
+            xj = X_norm[:, j : j + 1]
+            # Corresponding knot vector for feature j: (1,n_splines).
+            centers = self.knots[j].unsqueeze(0)
+            # Evaluate RBF basis: (batch,n_splines).
+            phi = self._rbf(xj, centers)
+            # Linear combination yields scalar coefficient per sample.
+            bj = self.linears[j](phi)  # (batch,1)
+            batch_coeffs.append(bj)
+
+        # Concatenate along feature dimension and add singleton axis to
+        # match the shape convention: (batch,1,in_size).
+        return torch.cat(batch_coeffs, dim=1).unsqueeze(1)
+
 
 def get_dist_model_by_name(name: str, f_num, n_layers: int, n_neurons: int,
                            batch_norm: bool) -> DistModel:
@@ -103,6 +192,8 @@ def get_dist_model_by_name(name: str, f_num, n_layers: int, n_neurons: int,
                             out_size=f_num)
     elif name == 'nam':
         return NAMDistModel(in_size=f_num, n_layers=n_layers, n_neurons=n_neurons, batch_norm=batch_norm)
+    elif name == "gam":
+        return GAMDistModel(in_size=f_num, n_layers=n_layers, n_splines=n_neurons or 10, gamma=10.0)
     else:
         raise Exception(f"Undefined mode = {name}")
 
